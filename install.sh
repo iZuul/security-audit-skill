@@ -4,6 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CF_SKILL_SRC="${REPO_ROOT}/skills/security-audit"
 SEC_REMEDIATION_SRC="${REPO_ROOT}/skills/security-remediation"
+SEC_ALL_SRC="${REPO_ROOT}/skills/security-all"
 
 AGY_SKILLS_ROOT="${HOME}/.gemini/config/skills"
 GEMINI_CMD_DIR="${HOME}/.gemini/commands"
@@ -12,24 +13,27 @@ CLAUDE_SKILLS_DIR="${HOME}/.claude/skills"
 AGENTS_SKILLS_ROOT="${HOME}/.agents/skills"
 
 echo "[install] 1. Installing to Antigravity / Gemini (${AGY_SKILLS_ROOT}) and Universal Agents (${AGENTS_SKILLS_ROOT})..."
-mkdir -p "${AGY_SKILLS_ROOT}/security-audit" "${AGY_SKILLS_ROOT}/security-remediation"
-mkdir -p "${AGENTS_SKILLS_ROOT}/security-audit" "${AGENTS_SKILLS_ROOT}/security-remediation"
+mkdir -p "${AGY_SKILLS_ROOT}/security-audit" "${AGY_SKILLS_ROOT}/security-remediation" "${AGY_SKILLS_ROOT}/security-all"
+mkdir -p "${AGENTS_SKILLS_ROOT}/security-audit" "${AGENTS_SKILLS_ROOT}/security-remediation" "${AGENTS_SKILLS_ROOT}/security-all"
 
 cp -r "${CF_SKILL_SRC}/"* "${AGY_SKILLS_ROOT}/security-audit/"
 cp -r "${SEC_REMEDIATION_SRC}/"* "${AGY_SKILLS_ROOT}/security-remediation/"
+cp -r "${SEC_ALL_SRC}/"* "${AGY_SKILLS_ROOT}/security-all/"
 chmod +x "${AGY_SKILLS_ROOT}/security-remediation/scan-project.py"
 
 cp -r "${CF_SKILL_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-audit/"
 cp -r "${SEC_REMEDIATION_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-remediation/"
+cp -r "${SEC_ALL_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-all/"
 chmod +x "${AGENTS_SKILLS_ROOT}/security-remediation/scan-project.py"
 
 # Optional workspace install if a target workspace path is passed as $1
 if [[ $# -ge 1 && -d "$1" ]]; then
   WS_SKILLS_ROOT="$1/.agents/skills"
   echo "[install] 1b. Also installing to workspace (${WS_SKILLS_ROOT})..."
-  mkdir -p "${WS_SKILLS_ROOT}/security-audit" "${WS_SKILLS_ROOT}/security-remediation"
+  mkdir -p "${WS_SKILLS_ROOT}/security-audit" "${WS_SKILLS_ROOT}/security-remediation" "${WS_SKILLS_ROOT}/security-all"
   cp -r "${CF_SKILL_SRC}/"* "${WS_SKILLS_ROOT}/security-audit/"
   cp -r "${SEC_REMEDIATION_SRC}/"* "${WS_SKILLS_ROOT}/security-remediation/"
+  cp -r "${SEC_ALL_SRC}/"* "${WS_SKILLS_ROOT}/security-all/"
   chmod +x "${WS_SKILLS_ROOT}/security-remediation/scan-project.py"
 fi
 
@@ -83,6 +87,7 @@ mkdir -p "${CLAUDE_CMD_DIR}" "${CLAUDE_SKILLS_DIR}"
 
 ln -sf "${AGENTS_SKILLS_ROOT}/security-audit" "${CLAUDE_SKILLS_DIR}/security-audit"
 ln -sf "${AGENTS_SKILLS_ROOT}/security-remediation" "${CLAUDE_SKILLS_DIR}/security-remediation"
+ln -sf "${AGENTS_SKILLS_ROOT}/security-all" "${CLAUDE_SKILLS_DIR}/security-all"
 
 cat > "${CLAUDE_CMD_DIR}/security-remediation.md" << 'EOF'
 ---

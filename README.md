@@ -13,9 +13,10 @@ This repository packages two complementary skills:
 ```
 security-audit-skill/
 ├── skills/
+│   ├── security-all/         # Unified Master Audit (DevSecOps + Cloudflare 6-Phase)
 │   ├── security-remediation/ # Extended DevSecOps + CVE + SAST + Auto-Remediation
 │   └── security-audit/       # Original Cloudflare 6-Phase Adversarial Audit (Untouched)
-├── install.sh                # One-click installer for Antigravity & Gemini CLI
+├── install.sh                # One-click installer for Antigravity, Gemini & Claude
 └── README.md
 ```
 
@@ -190,6 +191,9 @@ python3 skills/security-remediation/scan-project.py . --no-osv
 ├── LICENSE                                   # MIT License
 ├── README.md                                 # Documentation
 └── skills/
+    ├── security-all/                         # Unified All-in-One Security Audit
+    │   └── SKILL.md                          # Master workflow & report orchestration
+    │
     ├── security-remediation/                 # Extended DevSecOps & Auto-Fix Skill
     │   ├── SKILL.md                          # Skill definition & execution safety
     │   ├── DEVSECOPS-AND-CVE.md              # Scanner guide & rule catalog
