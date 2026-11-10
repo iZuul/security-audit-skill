@@ -53,6 +53,31 @@ Activate and follow the security audit workflow in ~/.gemini/config/skills/secur
 """
 EOF
 
+cat > "${GEMINI_CMD_DIR}/security-all.toml" << 'EOF'
+description = "Run Unified End-to-End Security Audit (DevSecOps CVEs + Secrets + SAST + Cloudflare 6-Phase Adversarial Audit + Consolidated Master Report)"
+prompt = """
+Execute the complete, unified security review across both skills to produce a single master report:
+
+1. BASELINE SCAN (DevSecOps):
+   Run `python3 ~/.gemini/config/skills/security-remediation/scan-project.py . --format markdown -o ./DEVSECOPS-BASELINE.md` to catalog all locked dependency CVEs (OSV.dev), secret leaks, git history hygiene, and SAST/IDOR heuristics.
+
+2. ADVERSARIAL HUNTING & VERIFICATION (Cloudflare Workflow):
+   Consult ~/.gemini/config/skills/security-audit/SKILL.md and relevant domain companions (HUNTING.md, WEB-PROTOCOL-AND-AUTH.md, DATA-ISOLATION-AND-LIFECYCLE.md):
+   - Trace whether baseline CVEs and SAST leads are reachable and exploitable from real trust boundaries.
+   - Hunt for deeper business logic, authentication bypass, and architectural defects.
+   - Run adversarial candidate validation to disprove false positives.
+
+3. CONSOLIDATED MASTER REPORT:
+   Generate a single comprehensive report file named `SECURITY-ALL-REPORT.md` in the project root containing:
+   - Executive Summary & Findings Matrix (Critical, High, Medium, Low)
+   - Part 1: Supply Chain & Dependency CVEs (with fixed versions & reachability analysis)
+   - Part 2: Secret, Environment & Git History Hygiene
+   - Part 3: Verified Source Code & Architectural Vulnerabilities (with file links & proof)
+   - Part 4: Triage of Non-Exploitable / Hardening Notes (False Positive Analysis)
+   - Part 5: Actionable Remediation Plan (package.json overrides & safe surgical code patches)
+"""
+EOF
+
 echo "[install] 3. Registering slash commands & skills for Claude Code / Claude Extension (${CLAUDE_CMD_DIR})..."
 mkdir -p "${CLAUDE_CMD_DIR}" "${CLAUDE_SKILLS_DIR}"
 
@@ -79,4 +104,30 @@ description: Run Cloudflare 6-Phase Adversarial Security Audit (read-only full a
 Follow the security audit workflow in `~/.agents/skills/security-audit/SKILL.md` to conduct a structured 6-phase adversarial security audit on this codebase.
 EOF
 
-echo "[install] Done! Commands '/security-remediation' and '/security-audit' are now available in Antigravity, Gemini CLI, and Claude Extension / Code."
+cat > "${CLAUDE_CMD_DIR}/security-all.md" << 'EOF'
+---
+description: Run Unified End-to-End Security Audit (DevSecOps CVEs + Secrets + SAST + Cloudflare 6-Phase Adversarial Audit + Consolidated Master Report)
+---
+
+Execute the complete, unified security review across both skills to produce a single master report:
+
+1. BASELINE SCAN (DevSecOps):
+   Run `python3 ~/.agents/skills/security-remediation/scan-project.py . --format markdown -o ./DEVSECOPS-BASELINE.md` to catalog all locked dependency CVEs (OSV.dev), secret leaks, git history hygiene, and SAST/IDOR heuristics.
+
+2. ADVERSARIAL HUNTING & VERIFICATION (Cloudflare Workflow):
+   Consult `~/.agents/skills/security-audit/SKILL.md` and relevant domain companions (HUNTING.md, WEB-PROTOCOL-AND-AUTH.md, DATA-ISOLATION-AND-LIFECYCLE.md):
+   - Trace whether baseline CVEs and SAST leads are reachable and exploitable from real trust boundaries.
+   - Hunt for deeper business logic, authentication bypass, and architectural defects.
+   - Run adversarial candidate validation to disprove false positives.
+
+3. CONSOLIDATED MASTER REPORT:
+   Generate a single comprehensive report file named `SECURITY-ALL-REPORT.md` in the project root containing:
+   - Executive Summary & Findings Matrix (Critical, High, Medium, Low)
+   - Part 1: Supply Chain & Dependency CVEs (with fixed versions & reachability analysis)
+   - Part 2: Secret, Environment & Git History Hygiene
+   - Part 3: Verified Source Code & Architectural Vulnerabilities (with file links & proof)
+   - Part 4: Triage of Non-Exploitable / Hardening Notes (False Positive Analysis)
+   - Part 5: Actionable Remediation Plan (package.json overrides & safe surgical code patches)
+EOF
+
+echo "[install] Done! Commands '/security-remediation', '/security-audit', and '/security-all' are now available in Antigravity, Gemini CLI, and Claude Extension / Code."

@@ -248,6 +248,7 @@ def check_git_env_hygiene(root: Path) -> List[Dict[str, Any]]:
 OFFLINE_KNOWN_CVES: List[Tuple[str, str, Tuple[int, int, int], str, str, str]] = [
     ("npm", "next", (14, 2, 25), "CVE-2025-29927", "CRITICAL", "Next.js Middleware Authorization Bypass via x-middleware-subrequest header (<14.2.25 / <15.2.3)"),
     ("npm", "next", (14, 1, 1), "CVE-2024-34351", "HIGH", "Next.js Server-Side Request Forgery (SSRF) in Server Actions"),
+    ("npm", "@sentry/nextjs", (10, 75, 2), "CVE-2026-114139", "CRITICAL", "Sentry Next.js Middleware Bypass when using tunnelRoute (<9.47.2 / <10.75.2 / <11.0.0-rc.1)"),
     ("npm", "axios", (1, 7, 4), "CVE-2024-39338", "HIGH", "Axios Server-Side Request Forgery (SSRF) and credential leak"),
     ("npm", "jsonwebtoken", (9, 0, 0), "CVE-2022-23529", "CRITICAL", "jsonwebtoken unrestricted key retrieval / RCE in verify()"),
     ("npm", "ws", (8, 17, 1), "CVE-2024-37890", "HIGH", "ws DoS when handling request with many HTTP headers"),
@@ -292,17 +293,55 @@ def extract_locked_dependencies(root: Path) -> List[Tuple[str, str, str]]:
         except Exception:
             pass
 
-    # 2. pnpm: pnpm-lock.yaml
+    # 2. pnpm: pnpm-lock.yaml (supports v6 and v9 with quoted scoped packages)
     pnpm_lock = root / "pnpm-lock.yaml"
     if pnpm_lock.exists():
         try:
             content = pnpm_lock.read_text(encoding="utf-8", errors="ignore")
-            for m in re.finditer(r"^\s*/?(@?[a-zA-Z0-9._\-/]+)@(\d+\.\d+\.\d+[^\s(:]*)", content, re.MULTILINE):
+            for m in re.finditer(r"^\s*['\"]?/?(@?[a-zA-Z0-9._\-/]+)@(\d+\.\d+\.\d+[^\s(:'\"]*)", content, re.MULTILINE):
                 deps[("npm", m.group(1), m.group(2))] = True
         except Exception:
             pass
 
-    # 3. Python: requirements.txt
+    # 3. yarn: yarn.lock
+    yarn_lock = root / "yarn.lock"
+    if yarn_lock.exists():
+        try:
+            curr_pkgs: List[str] = []
+            for line in yarn_lock.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if not line.startswith(" ") and "@" in line:
+                    curr_pkgs = []
+                    for part in line.rstrip(":").split(","):
+                        part = part.strip().strip('"').strip("'")
+                        if "@" in part:
+                            name = part.rsplit("@", 1)[0]
+                            if name:
+                                curr_pkgs.append(name)
+                elif line.strip().startswith("version") and curr_pkgs:
+                    v_match = re.search(r'version[:\s]+["\']?([0-9a-zA-Z._\-+]+)', line)
+                    if v_match:
+                        v = v_match.group(1)
+                        for p in curr_pkgs:
+                            deps[("npm", p, v)] = True
+                    curr_pkgs = []
+        except Exception:
+            pass
+
+    # 4. Manifest fallback: root & monorepo workspace package.json files
+    pkg_files = [root / "package.json"] + list(root.glob("apps/*/package.json")) + list(root.glob("packages/*/package.json"))
+    for pf in pkg_files:
+        if pf.exists():
+            try:
+                pj_data = json.loads(pf.read_text(encoding="utf-8", errors="ignore"))
+                for sec in ("dependencies", "devDependencies"):
+                    for name, spec in pj_data.get(sec, {}).items():
+                        clean_v = re.sub(r"^[~^>=< ]+", "", spec).split(" ")[0]
+                        if re.match(r"^\d+\.\d+\.\d+", clean_v):
+                            deps.setdefault(("npm", name, clean_v), True)
+            except Exception:
+                pass
+
+    # 5. Python: requirements.txt
     req_txt = root / "requirements.txt"
     if req_txt.exists():
         try:

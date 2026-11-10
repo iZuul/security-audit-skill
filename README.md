@@ -31,7 +31,7 @@ security-audit-skill/
 | **Auto-Remediation** | **Yes** (Surgical patches, non-breaking rules, `--fix-cve`) | Read-only reporting |
 | **6-Phase Adversarial Hunt** | **Yes** (Integrates Cloudflare attack classes & validators) | **Yes** (Core 6-phase workflow) |
 | **Findings & Ledger Validation** | Node.js validators + Python fallback validator | Node.js zero-dependency validators |
-| **Slash Command Integration** | `/security-remediation` | `/security-audit` |
+| **Slash Command Integration** | `/security-remediation`, `/security-all` | `/security-audit`, `/security-all` |
 
 ---
 
@@ -81,8 +81,8 @@ chmod +x install.sh
 ```
 
 This script:
-1. Installs `security-remediation` and `security-audit` into `~/.gemini/config/skills/`.
-2. Registers `/security-remediation` and `/security-audit` slash commands in `~/.gemini/commands/`.
+1. Installs `security-remediation` and `security-audit` into `~/.gemini/config/skills/` and `~/.agents/skills/`.
+2. Registers `/security-all`, `/security-remediation`, and `/security-audit` slash commands for Antigravity, Gemini CLI, and Claude Extension / Code.
 
 To also install both skills directly into a specific project workspace (`.agents/skills/`):
 
@@ -109,6 +109,17 @@ npx skills add https://github.com/iZuul/security-audit-skill \
 ## Usage
 
 ### In AI Coding Agents
+
+#### 🌟 All-in-One Master Audit (`/security-all`)
+Use `/security-all` to run both DevSecOps scanning and Cloudflare adversarial audit in one pass, generating a consolidated master report `SECURITY-ALL-REPORT.md`:
+
+```text
+/security-all
+```
+
+```text
+run full security audit on this project and save consolidated report to SECURITY-ALL-REPORT.md
+```
 
 #### DevSecOps & Remediation (`/security-remediation`)
 Use `/security-remediation` or natural language prompts:

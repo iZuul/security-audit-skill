@@ -119,3 +119,33 @@ test("scan-project.py --emit-ledger generates a coverage ledger of entry points"
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("scan-project.py parses pnpm-lock.yaml with quoted scoped packages and detects @sentry/nextjs CVE", () => {
+  const dir = makeTempFixture({
+    ".gitignore": ".env\n",
+    "pnpm-lock.yaml": [
+      "lockfileVersion: '9.0'",
+      "packages:",
+      "  '@sentry/nextjs@10.38.0':",
+      "    resolution: {integrity: sha512-mock}",
+      "  'next@14.2.0':",
+      "    resolution: {integrity: sha512-mock}",
+    ].join("\n"),
+  });
+
+  try {
+    const stdout = execFileSync(
+      "python3",
+      [SCANNER_PATH, dir, "--no-osv", "--format", "json"],
+      { encoding: "utf8" }
+    );
+    const report = JSON.parse(stdout);
+    const sentryVuln = report.dependency_audit.vulnerabilities.find(
+      (v) => v.package === "@sentry/nextjs"
+    );
+    assert.ok(sentryVuln, "Expected @sentry/nextjs to be detected in quoted pnpm-lock.yaml");
+    assert.match(sentryVuln.via, /CVE-2026-114139/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
