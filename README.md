@@ -12,6 +12,7 @@ This repository packages two complementary skills:
 
 ```
 security-audit-skill/
+├── standards/                # Universal Reporting Standards (GFM Specifications)
 ├── skills/
 │   ├── security-all/         # Unified Master Audit (DevSecOps + Cloudflare 6-Phase)
 │   ├── security-remediation/ # Extended DevSecOps + CVE + SAST + Auto-Remediation
@@ -190,8 +191,9 @@ python3 skills/security-remediation/scan-project.py . --no-osv
 ├── install.sh                                # Automated setup script
 ├── LICENSE                                   # MIT License
 ├── README.md                                 # Documentation
+├── standards/                                # Universal Quality & Reporting Standards
+│   └── REPORT-STANDARDIZATION.md             # Standardized markdown report specification
 └── skills/
-    ├── REPORT-STANDARDIZATION.md             # Universal report formatting specification
     ├── security-all/                         # Unified All-in-One Security Audit
     │   └── SKILL.md                          # Master workflow & report orchestration
     │

@@ -6,6 +6,8 @@ CF_SKILL_SRC="${REPO_ROOT}/skills/security-audit"
 SEC_REMEDIATION_SRC="${REPO_ROOT}/skills/security-remediation"
 SEC_ALL_SRC="${REPO_ROOT}/skills/security-all"
 
+STANDARDS_SRC="${REPO_ROOT}/standards"
+
 AGY_SKILLS_ROOT="${HOME}/.gemini/config/skills"
 GEMINI_CMD_DIR="${HOME}/.gemini/commands"
 CLAUDE_CMD_DIR="${HOME}/.claude/commands"
@@ -15,31 +17,30 @@ AGENTS_SKILLS_ROOT="${HOME}/.agents/skills"
 echo "[install] 1. Installing to Antigravity / Gemini (${AGY_SKILLS_ROOT}) and Universal Agents (${AGENTS_SKILLS_ROOT})..."
 mkdir -p "${AGY_SKILLS_ROOT}/security-audit" "${AGY_SKILLS_ROOT}/security-remediation" "${AGY_SKILLS_ROOT}/security-all"
 mkdir -p "${AGENTS_SKILLS_ROOT}/security-audit" "${AGENTS_SKILLS_ROOT}/security-remediation" "${AGENTS_SKILLS_ROOT}/security-all"
+mkdir -p "${HOME}/.gemini/config/standards" "${HOME}/.agents/standards"
 
 cp -r "${CF_SKILL_SRC}/"* "${AGY_SKILLS_ROOT}/security-audit/"
 cp -r "${SEC_REMEDIATION_SRC}/"* "${AGY_SKILLS_ROOT}/security-remediation/"
 cp -r "${SEC_ALL_SRC}/"* "${AGY_SKILLS_ROOT}/security-all/"
-cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGY_SKILLS_ROOT}/REPORT-STANDARDIZATION.md"
-cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGY_SKILLS_ROOT}/security-all/REPORT-STANDARDIZATION.md"
-cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGY_SKILLS_ROOT}/security-remediation/REPORT-STANDARDIZATION.md"
+cp -r "${STANDARDS_SRC}/"* "${HOME}/.gemini/config/standards/"
 chmod +x "${AGY_SKILLS_ROOT}/security-remediation/scan-project.py"
 
 cp -r "${CF_SKILL_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-audit/"
 cp -r "${SEC_REMEDIATION_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-remediation/"
 cp -r "${SEC_ALL_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-all/"
-cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGENTS_SKILLS_ROOT}/REPORT-STANDARDIZATION.md"
-cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGENTS_SKILLS_ROOT}/security-all/REPORT-STANDARDIZATION.md"
-cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGENTS_SKILLS_ROOT}/security-remediation/REPORT-STANDARDIZATION.md"
+cp -r "${STANDARDS_SRC}/"* "${HOME}/.agents/standards/"
 chmod +x "${AGENTS_SKILLS_ROOT}/security-remediation/scan-project.py"
 
 # Optional workspace install if a target workspace path is passed as $1
 if [[ $# -ge 1 && -d "$1" ]]; then
   WS_SKILLS_ROOT="$1/.agents/skills"
+  WS_STANDARDS_ROOT="$1/.agents/standards"
   echo "[install] 1b. Also installing to workspace (${WS_SKILLS_ROOT})..."
-  mkdir -p "${WS_SKILLS_ROOT}/security-audit" "${WS_SKILLS_ROOT}/security-remediation" "${WS_SKILLS_ROOT}/security-all"
+  mkdir -p "${WS_SKILLS_ROOT}/security-audit" "${WS_SKILLS_ROOT}/security-remediation" "${WS_SKILLS_ROOT}/security-all" "${WS_STANDARDS_ROOT}"
   cp -r "${CF_SKILL_SRC}/"* "${WS_SKILLS_ROOT}/security-audit/"
   cp -r "${SEC_REMEDIATION_SRC}/"* "${WS_SKILLS_ROOT}/security-remediation/"
   cp -r "${SEC_ALL_SRC}/"* "${WS_SKILLS_ROOT}/security-all/"
+  cp -r "${STANDARDS_SRC}/"* "${WS_STANDARDS_ROOT}/"
   chmod +x "${WS_SKILLS_ROOT}/security-remediation/scan-project.py"
 fi
 

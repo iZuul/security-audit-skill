@@ -22,7 +22,7 @@ Using the methodology from `../security-audit/HUNTING.md` and domain companions:
 - Check architecture, session handling, tenant isolation, and client-side boundaries.
 
 ### 3. Phase 3: Consolidated Master Report Generation
-Derive and write `SECURITY-ALL-REPORT.md` at the project root strictly adhering to [../REPORT-STANDARDIZATION.md](../REPORT-STANDARDIZATION.md):
+Derive and write `SECURITY-ALL-REPORT.md` at the project root strictly adhering to [../../standards/REPORT-STANDARDIZATION.md](../../standards/REPORT-STANDARDIZATION.md):
 
 - **Header**: Standard document metadata, technology stack, audit standard, audit date, execution scope, and overall posture (`ASSESSED (Action Required)` or `HARDENED & VERIFIED`).
 - **Executive Summary & Risk Matrix**: Standard GFM pipe table (no ASCII-art boxes) with threat categories: Supply Chain, Broken Access Control / IDOR, Auth & Sessions, Network/SSRF, Injection, Secrets & Git, and Container/CI, including Remediated counts and Status.
