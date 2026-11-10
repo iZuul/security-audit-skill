@@ -19,11 +19,17 @@ mkdir -p "${AGENTS_SKILLS_ROOT}/security-audit" "${AGENTS_SKILLS_ROOT}/security-
 cp -r "${CF_SKILL_SRC}/"* "${AGY_SKILLS_ROOT}/security-audit/"
 cp -r "${SEC_REMEDIATION_SRC}/"* "${AGY_SKILLS_ROOT}/security-remediation/"
 cp -r "${SEC_ALL_SRC}/"* "${AGY_SKILLS_ROOT}/security-all/"
+cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGY_SKILLS_ROOT}/REPORT-STANDARDIZATION.md"
+cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGY_SKILLS_ROOT}/security-all/REPORT-STANDARDIZATION.md"
+cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGY_SKILLS_ROOT}/security-remediation/REPORT-STANDARDIZATION.md"
 chmod +x "${AGY_SKILLS_ROOT}/security-remediation/scan-project.py"
 
 cp -r "${CF_SKILL_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-audit/"
 cp -r "${SEC_REMEDIATION_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-remediation/"
 cp -r "${SEC_ALL_SRC}/"* "${AGENTS_SKILLS_ROOT}/security-all/"
+cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGENTS_SKILLS_ROOT}/REPORT-STANDARDIZATION.md"
+cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGENTS_SKILLS_ROOT}/security-all/REPORT-STANDARDIZATION.md"
+cp "${REPO_ROOT}/skills/REPORT-STANDARDIZATION.md" "${AGENTS_SKILLS_ROOT}/security-remediation/REPORT-STANDARDIZATION.md"
 chmod +x "${AGENTS_SKILLS_ROOT}/security-remediation/scan-project.py"
 
 # Optional workspace install if a target workspace path is passed as $1

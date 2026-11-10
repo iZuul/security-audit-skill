@@ -191,6 +191,7 @@ python3 skills/security-remediation/scan-project.py . --no-osv
 ├── LICENSE                                   # MIT License
 ├── README.md                                 # Documentation
 └── skills/
+    ├── REPORT-STANDARDIZATION.md             # Universal report formatting specification
     ├── security-all/                         # Unified All-in-One Security Audit
     │   └── SKILL.md                          # Master workflow & report orchestration
     │
