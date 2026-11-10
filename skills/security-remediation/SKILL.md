@@ -1,9 +1,9 @@
 ---
-name: sec-audit
-description: Security guidance, DevSecOps CVE/OSV.dev & secret scanning, coverage-led vulnerability hunting, adversarial verification, and safe auto-remediation for codebases, APIs, services, CLI tools, libraries, and daemons. Triggered via /sec-audit or when the user asks for security questions, focused reviews, vulnerability research, security audits, pen tests, or security auto-fixes.
+name: security-remediation
+description: Security guidance, DevSecOps CVE/OSV.dev & secret scanning, coverage-led vulnerability hunting, adversarial verification, and safe auto-remediation for codebases, APIs, services, CLI tools, libraries, and daemons. Triggered via /security-remediation or when the user asks for security questions, focused reviews, vulnerability research, security audits, pen tests, or security auto-fixes.
 ---
 
-# Security Audit (`sec-audit`)
+# Security Remediation (`security-remediation`)
 
 Find vulnerabilities that violate a real trust boundary, then give owners the source evidence, safe reproduction, priority, and smallest effective fix. This is a defensive, source-first workflow. A candidate without a concrete affected principal, resource, or security outcome is not a confirmed finding.
 
@@ -12,7 +12,7 @@ Find vulnerabilities that violate a real trust boundary, then give owners the so
 This skill is guidance by default. Loading it does not authorize the complete audit workflow or file creation.
 
 - **Guidance mode**: For security questions, focused reviews, methodology, triage, or investigation of specific findings, use only the relevant parts of this skill. Do not automatically run all six phases, create an output directory, or write audit artifacts. You may launch focused agents when useful; they return results to the current task.
-- **DevSecOps & Auto-Fix mode (`/sec-audit`)**: When invoked via `/sec-audit` or when the user asks to scan dependencies/CVEs, hunt vulnerabilities, and fix security issues in the workspace:
+- **DevSecOps & Auto-Fix mode (`/security-remediation`)**: When invoked via `/security-remediation` or when the user asks to scan dependencies/CVEs, hunt vulnerabilities, and fix or remediate security issues in the workspace:
   1. Run the deterministic baseline scanner (`python3 <skill-dir>/scan-project.py <target> --format markdown`) defined in [DEVSECOPS-AND-CVE.md](DEVSECOPS-AND-CVE.md) (live OSV.dev Batch CVE API, secret/git-history hygiene, SAST/IDOR heuristics, Docker/CI checks).
   2. Perform coverage-led contextual hunting using [../security-audit/HUNTING.md](../security-audit/HUNTING.md), [../security-audit/ATTACK-CLASSES.md](../security-audit/ATTACK-CLASSES.md), and the relevant domain companions in `../security-audit/` (`[../security-audit/WEB-PROTOCOL-AND-AUTH.md](../security-audit/WEB-PROTOCOL-AND-AUTH.md)`, `[../security-audit/DATA-ISOLATION-AND-LIFECYCLE.md](../security-audit/DATA-ISOLATION-AND-LIFECYCLE.md)`, `[../security-audit/CLIENT-SIDE.md](../security-audit/CLIENT-SIDE.md)`, etc.).
   3. When the user requests remediation or auto-fix, apply non-breaking surgical fixes and `package.json` CVE overrides (`--fix-cve`) following [AUTO-REMEDIATION.md](AUTO-REMEDIATION.md), then re-run `scan-project.py` and the project's typechecker/tests to verify zero regressions.

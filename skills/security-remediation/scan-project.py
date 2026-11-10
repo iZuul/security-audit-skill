@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sec-audit: Zero-dependency project security scanner.
+security-remediation: Zero-dependency project security scanner & remediation engine.
 Detects tech stack, checks git/env hygiene, audits dependencies (local CLI / OSV API),
 and scans source code for hardcoded secrets, config leaks, and SAST vulnerability patterns.
 """
@@ -366,7 +366,7 @@ def query_osv_api(deps: List[Tuple[str, str, str]]) -> Tuple[List[Dict[str, Any]
         req = urllib.request.Request(
             "https://api.osv.dev/v1/querybatch",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "User-Agent": "sec-audit-scanner/1.0"},
+            headers={"Content-Type": "application/json", "User-Agent": "security-remediation-scanner/1.0"},
             method="POST",
         )
         try:
@@ -396,7 +396,7 @@ def query_osv_api(deps: List[Tuple[str, str, str]]) -> Tuple[List[Dict[str, Any]
                     try:
                         detail_req = urllib.request.Request(
                             f"https://api.osv.dev/v1/vulns/{vuln_id}",
-                            headers={"User-Agent": "sec-audit-scanner/1.0"},
+                            headers={"User-Agent": "security-remediation-scanner/1.0"},
                         )
                         with urllib.request.urlopen(detail_req, timeout=5) as d_resp:
                             d_data = json.loads(d_resp.read().decode("utf-8"))
@@ -910,7 +910,7 @@ def emit_coverage_ledger(root: Path, ledger_path: Path) -> Dict[str, Any]:
                 })
 
     ledger = {
-        "schema_version": "1.0-sec-audit-cf-hybrid",
+        "schema_version": "1.0-security-remediation-cf-hybrid",
         "project": str(root),
         "total_units": len(units),
         "units": units,
@@ -1039,7 +1039,7 @@ def scan_files(root: Path, only_files: Optional[List[str]] = None) -> List[Dict[
 
 def format_markdown(root: Path, stack: Dict[str, Any], dep_audit: Dict[str, Any], findings: List[Dict[str, Any]]) -> str:
     out = []
-    out.append(f"# Security Audit Report (`sec-audit`)")
+    out.append(f"# Security Remediation Report (`security-remediation`)")
     out.append(f"**Target Project**: `{root}`\n")
 
     out.append("## 1. Detected Tech Stack")
@@ -1086,7 +1086,7 @@ def format_markdown(root: Path, stack: Dict[str, Any], dep_audit: Dict[str, Any]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="sec-audit: Hybrid DevSecOps & Cloudflare-style Adversarial Security Scanner")
+    parser = argparse.ArgumentParser(description="security-remediation: Hybrid DevSecOps & Cloudflare-style Adversarial Security Scanner")
     parser.add_argument("path", nargs="?", default=".", help="Path to project root")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown", help="Output format")
     parser.add_argument("-o", "--output", metavar="FILE", help="Save report output directly to FILE (.md or .json)")
@@ -1106,16 +1106,16 @@ def main() -> None:
     if args.validate_findings:
         ok, errs = validate_findings_file(Path(args.validate_findings))
         if ok:
-            print(f"[sec-audit] findings schema valid: {args.validate_findings}")
+            print(f"[security-remediation] findings schema valid: {args.validate_findings}")
             sys.exit(0)
         else:
             for e in errs:
-                print(f"[sec-audit] schema error: {e}", file=sys.stderr)
+                print(f"[security-remediation] schema error: {e}", file=sys.stderr)
             sys.exit(1)
 
     if args.emit_ledger:
         ledger = emit_coverage_ledger(root, Path(args.emit_ledger))
-        print(f"[sec-audit] Emitted coverage ledger with {ledger['total_units']} security units to {args.emit_ledger}")
+        print(f"[security-remediation] Emitted coverage ledger with {ledger['total_units']} security units to {args.emit_ledger}")
         if not args.staged and not args.git_history and not args.fix_cve:
             return
 
@@ -1149,7 +1149,7 @@ def main() -> None:
     if args.output:
         out_path = Path(args.output)
         out_path.write_text(report_str + "\n", encoding="utf-8")
-        print(f"[sec-audit] Report saved to: {out_path}")
+        print(f"[security-remediation] Report saved to: {out_path}")
     else:
         print(report_str)
 

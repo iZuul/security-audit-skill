@@ -1,6 +1,6 @@
 # DevSecOps, CVE, and Automated Baseline Scanning
 
-Use this companion during **Phase 1 (Reconnaissance)** and **Phase 2 (Coverage-led hunting)** or in **DevSecOps & Auto-Fix mode (`/sec-audit`)** to run deterministic baseline checks for live CVEs, leaked secrets, infrastructure misconfigurations, and static source patterns before or alongside agent-led hunting.
+Use this companion during **Phase 1 (Reconnaissance)** and **Phase 2 (Coverage-led hunting)** or in **DevSecOps & Auto-Fix mode (`/security-remediation`)** to run deterministic baseline checks for live CVEs, leaked secrets, infrastructure misconfigurations, and static source patterns before or alongside agent-led hunting.
 
 ## Overview
 

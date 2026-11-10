@@ -1,8 +1,8 @@
 # Safe Auto-Remediation Guide
 
-Use this companion when the user operates in **DevSecOps & Auto-Fix mode (`/sec-audit`)** or explicitly asks to **fix / remediate discovered vulnerabilities**.
+Use this companion when the user operates in **DevSecOps & Auto-Fix mode (`/security-remediation`)** or explicitly asks to **fix / remediate discovered vulnerabilities**.
 
-> **Boundary rule**: In pure read-only **Full audit mode**, the skill only reports findings and describes minimal fixes without modifying target source (see [SKILL.md](SKILL.md)). Execute the source modifications in this guide **only** when the user asks to fix, patch, or auto-remediate vulnerabilities (or invokes `/sec-audit` with remediation intent).
+> **Boundary rule**: In pure read-only **Full audit mode**, the skill only reports findings and describes minimal fixes without modifying target source (see [SKILL.md](SKILL.md)). Execute the source modifications in this guide **only** when the user asks to fix, patch, or auto-remediate vulnerabilities (or invokes `/security-remediation` with remediation intent).
 
 ---
 

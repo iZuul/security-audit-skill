@@ -10,7 +10,7 @@ const { execFileSync } = require("node:child_process");
 const SCANNER_PATH = path.join(__dirname, "scan-project.py");
 
 function makeTempFixture(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sec-audit-scan-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "security-remediation-scan-test-"));
   for (const [relPath, content] of Object.entries(files)) {
     const fullPath = path.join(dir, relPath);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -113,7 +113,7 @@ test("scan-project.py --emit-ledger generates a coverage ledger of entry points"
       { encoding: "utf8" }
     );
     const ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
-    assert.equal(ledger.schema_version, "1.0-sec-audit-cf-hybrid");
+    assert.equal(ledger.schema_version, "1.0-security-remediation-cf-hybrid");
     assert.equal(ledger.units.length, 2);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
