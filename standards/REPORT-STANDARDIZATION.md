@@ -70,18 +70,28 @@ The Risk Matrix must categorize findings using standard threat categories and di
 
 ## 4. Standard Supply Chain & Dependency CVE Table
 
-The dependency audit must use this exact column order and include reachability assessment:
+The dependency audit must use this exact column order and include parent dependency lineage and reachability assessment:
 
 ```markdown
 ## 1. Supply Chain & Dependency CVEs
 
 <Statement of total locked packages inspected and databases queried (OSV.dev, NVD, GHSA).>
 
-| Severity | Package | Locked Version | Advisory / CVE ID | Reachability Assessment & Exploitability | Patched Version | Remediation Status |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **CRITICAL** | `@sentry/nextjs` | `10.38.0` | [CVE-2026-114139](https://nvd.nist.gov/vuln/detail/CVE-2026-114139)<br>[GHSA-mchm-gjx6-7h55](https://github.com/advisories/GHSA-mchm-gjx6-7h55) | **Reachable**: Target activates `tunnelRoute: '/monitoring'` in `next.config.mjs`, causing Next.js middleware bypass. | `>=10.75.2`<br>`>=9.47.2` | **REMEDIATED** via package.json override |
-| **HIGH** | `follow-redirects` | `1.16.0` | [CVE-2026-111755](https://nvd.nist.gov/vuln/detail/CVE-2026-111755) | **Reachable**: Used by HTTP client; cross-origin redirects leak Authorization headers. | `>=1.16.2` | **OPEN** |
+| Severity | Package | Locked Version | Dependency Type | Introduced By / Parent | Advisory / CVE ID | Reachability Assessment & Exploitability | Patched Version | Remediation Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **CRITICAL** | `@sentry/nextjs` | `10.38.0` | `Direct (Prod)` | `apps/portal-admin` | [CVE-2026-114139](https://nvd.nist.gov/vuln/detail/CVE-2026-114139)<br>[GHSA-mchm-gjx6-7h55](https://github.com/advisories/GHSA-mchm-gjx6-7h55) | **Reachable**: Target activates `tunnelRoute: '/monitoring'` in `next.config.mjs`, causing Next.js middleware bypass. | `>=10.75.2`<br>`>=9.47.2` | **REMEDIATED** via package.json override |
+| **HIGH** | `undici` | `6.26.0` | `Bundled (inBundle)` | `npm@11.16.0` *(via `semantic-release` devDependency)* | [CVE-2024-51752](https://nvd.nist.gov/vuln/detail/CVE-2024-51752) | **Unreachable in Web Runtime**: Bundled inside release CLI tool executed exclusively during CI/CD publishing pipeline. | N/A (Bundled) | **TRIAGED / ACCEPTED RISK** (CI-only, override not applicable) |
+| **HIGH** | `follow-redirects` | `1.16.0` | `Transitive` | `packages/ui -> axios@1.20.0` | [CVE-2026-111755](https://nvd.nist.gov/vuln/detail/CVE-2026-111755) | **Reachable**: Used by HTTP client; cross-origin redirects leak Authorization headers. | `>=1.16.2` | **OPEN** |
 ```
+
+> **Lineage Attribution Standard**:
+> - **Dependency Type**:
+>   - `Direct (Prod)`: Direct production runtime dependency in `dependencies`.
+>   - `Direct (Dev)`: Direct build/tooling dependency in `devDependencies`.
+>   - `Transitive`: Indirect dependency pulled by another package.
+>   - `Bundled (inBundle)`: Vendor-bundled inside a parent package tarball (e.g. `npm@11.x`), immune to standard package manager overrides.
+> - **Introduced By / Parent**:
+>   - Shows the root workspace caller or parent chain: e.g. `apps/portal-admin`, `packages/ui -> axios@1.20.0`, or `npm@11.16.0 (via semantic-release)`. Shows `-` if root direct.
 
 ---
 

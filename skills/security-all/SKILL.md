@@ -26,7 +26,7 @@ Derive and write `SECURITY-ALL-REPORT.md` at the project root strictly adhering 
 
 - **Header**: Standard document metadata, technology stack, audit standard, audit date, execution scope, and overall posture (`ASSESSED (Action Required)` or `HARDENED & VERIFIED`).
 - **Executive Summary & Risk Matrix**: Standard GFM pipe table (no ASCII-art boxes) with threat categories: Supply Chain, Broken Access Control / IDOR, Auth & Sessions, Network/SSRF, Injection, Secrets & Git, and Container/CI, including Remediated counts and Status.
-- **Section 1: Supply Chain & Dependency CVEs**: Standard GFM table (`Severity | Package | Locked Version | Advisory / CVE ID | Reachability Assessment & Exploitability | Patched Version | Remediation Status`).
+- **Section 1: Supply Chain & Dependency CVEs**: Standard GFM table (`Severity | Package | Locked Version | Dependency Type | Introduced By / Parent | Advisory / CVE ID | Reachability Assessment & Exploitability | Patched Version | Remediation Status`).
 - **Section 2: Secret, Environment & Git History Hygiene**: Subsections A (Git history last 50 commits), B (Environment files & `.gitignore`), C (Container & runtime leaks).
 - **Section 3: Verified Source Code & Architectural Vulnerabilities**: Standard finding cards using `[SEC-*]` rule IDs with File & Location links, Trust Boundary, Vulnerability snippet, Exploitation & Impact, Surgical Fix, Verification, and Remediation Status.
 - **Section 4: Triaged False Positives**: Structured GFM table (`Rule ID | File & Location | Context / Triggered Pattern | Triage Verdict (Why It Is Safe)`).

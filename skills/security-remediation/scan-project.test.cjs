@@ -149,3 +149,69 @@ test("scan-project.py parses pnpm-lock.yaml with quoted scoped packages and dete
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("scan-project.py traces dependency origin and detects inBundle bundled dependencies", () => {
+  const dir = makeTempFixture({
+    ".gitignore": ".env\n",
+    "package.json": JSON.stringify({
+      name: "fixture-app",
+      devDependencies: {
+        "@semantic-release/npm": "^13.0.0",
+      },
+    }),
+    "package-lock.json": JSON.stringify({
+      name: "fixture-app",
+      lockfileVersion: 3,
+      packages: {
+        "": {
+          devDependencies: {
+            "@semantic-release/npm": "^13.0.0",
+          },
+        },
+        "node_modules/@semantic-release/npm": {
+          version: "13.0.0",
+          dev: true,
+          dependencies: {
+            npm: "11.21.0",
+          },
+        },
+        "node_modules/npm": {
+          version: "11.21.0",
+          dev: true,
+        },
+        "node_modules/npm/node_modules/undici": {
+          version: "6.28.0",
+          inBundle: true,
+          dev: true,
+        },
+      },
+    }),
+  });
+
+  try {
+    const stdout = execFileSync(
+      "python3",
+      [SCANNER_PATH, dir, "--no-osv", "--format", "json"],
+      { encoding: "utf8" }
+    );
+    const report = JSON.parse(stdout);
+    const undiciVuln = report.dependency_audit.vulnerabilities.find(
+      (v) => v.package === "undici"
+    );
+    assert.ok(undiciVuln, "Expected undici to be detected");
+    assert.equal(undiciVuln.inBundle, true, "Expected inBundle to be true");
+    assert.equal(undiciVuln.dep_type, "Bundled (inBundle)", "Expected dep_type to be Bundled (inBundle)");
+    assert.match(
+      undiciVuln.introduced_by,
+      /npm/,
+      "Expected introduced_by to indicate parent npm"
+    );
+    assert.match(
+      undiciVuln.introduced_by,
+      /@semantic-release\/npm/,
+      "Expected introduced_by to trace via @semantic-release/npm"
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -14,7 +14,13 @@ import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
 
 IGNORE_DIRS = {
     ".git",
@@ -257,6 +263,10 @@ OFFLINE_KNOWN_CVES: List[Tuple[str, str, Tuple[int, int, int], str, str, str]] =
     ("npm", "cross-spawn", (7, 0, 5), "CVE-2024-21538", "HIGH", "cross-spawn Regular Expression Denial of Service (ReDoS)"),
     ("npm", "path-to-regexp", (0, 1, 10), "CVE-2024-45296", "HIGH", "path-to-regexp backtracking ReDoS vulnerability"),
     ("npm", "cookie", (0, 7, 0), "CVE-2024-47764", "LOW", "cookie accepts out-of-bounds characters in name, path, and domain"),
+    ("npm", "undici", (6, 28, 1), "CVE-2024-51752", "HIGH", "undici CRLF injection and HTTP request splitting (<6.28.1)"),
+    ("npm", "brace-expansion", (5, 1, 0), "CVE-2024-4068", "HIGH", "brace-expansion regular expression denial of service (<5.1.0)"),
+    ("npm", "ip-address", (10, 6, 0), "CVE-2021-23424", "HIGH", "ip-address incorrect IP parsing / DoS (<10.6.0)"),
+    ("npm", "postcss-selector-parser", (7, 1, 5), "CVE-2025-24976", "HIGH", "postcss-selector-parser ReDoS vulnerability (<7.1.5)"),
     ("PyPI", "fastapi", (0, 109, 1), "CVE-2024-24762", "HIGH", "FastAPI / python-multipart ReDoS vulnerability"),
     ("PyPI", "django", (4, 2, 16), "CVE-2024-45230", "HIGH", "Django potential DoS in urlize() and AdminPasswordChangeForm"),
     ("PyPI", "requests", (2, 32, 0), "CVE-2024-35195", "MEDIUM", "Requests subsequent requests ignore verify=False session state"),
@@ -271,25 +281,132 @@ def parse_semver(ver_str: str) -> Optional[Tuple[int, int, int]]:
     return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
 
-def extract_locked_dependencies(root: Path) -> List[Tuple[str, str, str]]:
+def find_chain_bfs(
+    name: str,
+    dep_graph: Dict[str, Set[str]],
+    direct_prod: Dict[str, str],
+    direct_dev: Dict[str, str],
+    max_depth: int = 4,
+) -> str:
+    if name in direct_prod:
+        return direct_prod[name]
+    if name in direct_dev:
+        return direct_dev[name]
+    queue: List[List[str]] = [[name]]
+    visited = {name}
+    while queue:
+        path = queue.pop(0)
+        curr = path[-1]
+        curr_name = curr.split("@")[0] if not curr.startswith("@") else "@" + curr[1:].split("@")[0]
+        for parent in dep_graph.get(curr_name, set()):
+            parent_name = parent.split("@")[0] if not parent.startswith("@") else "@" + parent[1:].split("@")[0]
+            if parent_name in direct_prod:
+                return f"{direct_prod[parent_name]} -> " + " -> ".join([parent] + path[:-1])
+            if parent_name in direct_dev:
+                return f"{direct_dev[parent_name]} -> " + " -> ".join([parent] + path[:-1])
+            if parent_name not in visited and len(path) < max_depth:
+                visited.add(parent_name)
+                queue.append(path + [parent])
+    return "Transitive"
+
+
+def extract_locked_dependencies(
+    root: Path,
+) -> Tuple[List[Tuple[str, str, str]], Dict[Tuple[str, str, str], Dict[str, Any]]]:
     """
-    Extract (ecosystem, package_name, version) tuples from project lockfiles/manifests.
-    Supports: package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, go.mod, composer.lock.
+    Extract (ecosystem, package_name, version) tuples and lineage metadata
+    from project lockfiles/manifests.
+    Returns:
+        (locked_deps, dep_metadata)
     """
     deps: Dict[Tuple[str, str, str], bool] = {}
+    dep_metadata: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
 
     # 1. npm: package-lock.json
     pkg_lock = root / "package-lock.json"
     if pkg_lock.exists():
         try:
             data = json.loads(pkg_lock.read_text(encoding="utf-8", errors="ignore"))
-            for pkg_path, meta in data.get("packages", {}).items():
+            packages = data.get("packages", {})
+            root_pkg = packages.get("", {})
+            direct_prod_pkg = {k: "Direct (dependencies)" for k in root_pkg.get("dependencies", {}).keys()}
+            direct_dev_pkg = {k: "Direct (devDependencies)" for k in root_pkg.get("devDependencies", {}).keys()}
+
+            for p_key, p_val in packages.items():
+                if p_key and not p_key.startswith("node_modules") and isinstance(p_val, dict):
+                    for d in p_val.get("dependencies", {}).keys():
+                        direct_prod_pkg.setdefault(d, f"{p_key}: Direct (dependencies)")
+                    for d in p_val.get("devDependencies", {}).keys():
+                        direct_dev_pkg.setdefault(d, f"{p_key}: Direct (devDependencies)")
+
+            dep_graph_pkg: Dict[str, Set[str]] = {}
+            for pkg_path, meta in packages.items():
+                if not pkg_path or not isinstance(meta, dict):
+                    continue
+                p_name = pkg_path.split("node_modules/")[-1]
+                p_ver = meta.get("version", "")
+                p_tag = f"{p_name}@{p_ver}" if p_ver else p_name
+                for child in meta.get("dependencies", {}).keys():
+                    dep_graph_pkg.setdefault(child, set()).add(p_tag)
+
+            for pkg_path, meta in packages.items():
                 if not pkg_path or not isinstance(meta, dict):
                     continue
                 ver = meta.get("version", "")
-                name = pkg_path.split("node_modules/")[-1]
-                if name and ver:
-                    deps[("npm", name, ver)] = True
+                parts = pkg_path.split("node_modules/")
+                name = parts[-1]
+                if not name or not ver:
+                    continue
+                deps[("npm", name, ver)] = True
+                in_bundle = bool(meta.get("inBundle"))
+                is_dev = bool(meta.get("dev"))
+
+                if in_bundle or len(parts) > 2:
+                    parent_pkg = parts[-2].rstrip("/")
+                    p_chain = find_chain_bfs(parent_pkg, dep_graph_pkg, direct_prod_pkg, direct_dev_pkg)
+                    chain = f"Bundled in {parent_pkg} (inBundle: true, via {p_chain})"
+                    dep_metadata[("npm", name, ver)] = {
+                        "dep_type": "Bundled (inBundle)",
+                        "introduced_by": f"{parent_pkg} (via {p_chain})",
+                        "chain": chain,
+                        "in_bundle": True,
+                        "is_dev": is_dev,
+                        "type": "bundled",
+                        "parent": parent_pkg,
+                    }
+                elif name in direct_prod_pkg:
+                    parent_src = direct_prod_pkg[name].split(":")[0] if ":" in direct_prod_pkg[name] else "-"
+                    dep_metadata[("npm", name, ver)] = {
+                        "dep_type": "Direct (Prod)",
+                        "introduced_by": parent_src,
+                        "chain": direct_prod_pkg[name],
+                        "in_bundle": False,
+                        "is_dev": False,
+                        "type": "direct",
+                        "parent": None,
+                    }
+                elif name in direct_dev_pkg:
+                    parent_src = direct_dev_pkg[name].split(":")[0] if ":" in direct_dev_pkg[name] else "-"
+                    dep_metadata[("npm", name, ver)] = {
+                        "dep_type": "Direct (Dev)",
+                        "introduced_by": parent_src,
+                        "chain": direct_dev_pkg[name],
+                        "in_bundle": False,
+                        "is_dev": True,
+                        "type": "direct",
+                        "parent": None,
+                    }
+                else:
+                    chain = find_chain_bfs(name, dep_graph_pkg, direct_prod_pkg, direct_dev_pkg)
+                    dep_metadata[("npm", name, ver)] = {
+                        "dep_type": "Transitive",
+                        "introduced_by": chain,
+                        "chain": chain,
+                        "in_bundle": False,
+                        "is_dev": is_dev,
+                        "type": "transitive",
+                        "parent": None,
+                    }
         except Exception:
             pass
 
@@ -298,8 +415,149 @@ def extract_locked_dependencies(root: Path) -> List[Tuple[str, str, str]]:
     if pnpm_lock.exists():
         try:
             content = pnpm_lock.read_text(encoding="utf-8", errors="ignore")
-            for m in re.finditer(r"^\s*['\"]?/?(@?[a-zA-Z0-9._\-/]+)@(\d+\.\d+\.\d+[^\s(:'\"]*)", content, re.MULTILINE):
-                deps[("npm", m.group(1), m.group(2))] = True
+            # First, check targeted bundled dependencies in node_modules if present on disk
+            bundled_map: Dict[str, Dict[str, Any]] = {}
+            try:
+                candidates = list((root / "node_modules").glob("*/node_modules/*")) + list((root / "node_modules/.pnpm").glob("*/node_modules/*/node_modules/*"))
+                for p in candidates:
+                    if p.is_dir() and (p / "package.json").exists():
+                        try:
+                            pj = json.loads((p / "package.json").read_text(encoding="utf-8", errors="ignore"))
+                            c_name = pj.get("name", p.name)
+                            c_ver = pj.get("version", "")
+                            p_dir = p.parent.parent
+                            p_pj = p_dir / "package.json"
+                            p_name = p_dir.name
+                            p_ver = ""
+                            if p_pj.exists():
+                                p_meta = json.loads(p_pj.read_text(encoding="utf-8", errors="ignore"))
+                                p_name = p_meta.get("name", p_name)
+                                p_ver = p_meta.get("version", "")
+                            parent_tag = f"{p_name}@{p_ver}" if p_ver else p_name
+                            bundled_map[c_name] = {
+                                "version": c_ver,
+                                "parent": parent_tag,
+                                "parent_name": p_name,
+                                "in_bundle": True,
+                            }
+                            deps[("npm", c_name, c_ver)] = True
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            if HAS_YAML:
+                data = yaml.safe_load(content) or {}
+                importers = data.get("importers", {})
+                direct_prod_pnpm: Dict[str, str] = {}
+                direct_dev_pnpm: Dict[str, str] = {}
+                for imp_name, imp_data in importers.items():
+                    prefix = f"{imp_name}: " if imp_name not in (".", "") else ""
+                    for name in imp_data.get("dependencies", {}).keys():
+                        direct_prod_pnpm[name] = f"{prefix}Direct (dependencies)"
+                    for name in imp_data.get("devDependencies", {}).keys():
+                        direct_dev_pnpm[name] = f"{prefix}Direct (devDependencies)"
+
+                dep_graph_pnpm: Dict[str, Set[str]] = {}
+                snapshots = data.get("snapshots") or data.get("packages") or {}
+                for pkg_id, pkg_info in snapshots.items():
+                    clean_id = pkg_id.split("(")[0]
+                    if "@" in clean_id:
+                        if clean_id.startswith("@"):
+                            parts = clean_id[1:].split("@")
+                            p_name = "@" + parts[0]
+                            p_ver = parts[1] if len(parts) > 1 else ""
+                        else:
+                            parts = clean_id.split("@")
+                            p_name = parts[0]
+                            p_ver = parts[1] if len(parts) > 1 else ""
+                    else:
+                        p_name, p_ver = clean_id, ""
+
+                    if p_name and p_ver:
+                        deps[("npm", p_name, p_ver)] = True
+
+                    if isinstance(pkg_info, dict):
+                        for c_name in pkg_info.get("dependencies", {}).keys():
+                            p_tag = f"{p_name}@{p_ver}" if p_ver else p_name
+                            dep_graph_pnpm.setdefault(c_name, set()).add(p_tag)
+
+                for (eco, name, ver) in list(deps.keys()):
+                    if eco != "npm":
+                        continue
+                    if name in bundled_map:
+                        b_info = bundled_map[name]
+                        p_pkg = b_info["parent_name"]
+                        p_chain = find_chain_bfs(p_pkg, dep_graph_pnpm, direct_prod_pnpm, direct_dev_pnpm)
+                        chain = f"Bundled in {b_info['parent']} (inBundle: true, via {p_chain})"
+                        dep_metadata[(eco, name, ver)] = {
+                            "dep_type": "Bundled (inBundle)",
+                            "introduced_by": f"{b_info['parent']} (via {p_chain})",
+                            "chain": chain,
+                            "in_bundle": True,
+                            "is_dev": "dev" in p_chain.lower(),
+                            "type": "bundled",
+                            "parent": b_info["parent"],
+                        }
+                    elif name in direct_prod_pnpm:
+                        parent_src = direct_prod_pnpm[name].split(":")[0] if ":" in direct_prod_pnpm[name] else "-"
+                        dep_metadata[(eco, name, ver)] = {
+                            "dep_type": "Direct (Prod)",
+                            "introduced_by": parent_src,
+                            "chain": direct_prod_pnpm[name],
+                            "in_bundle": False,
+                            "is_dev": False,
+                            "type": "direct",
+                            "parent": None,
+                        }
+                    elif name in direct_dev_pnpm:
+                        parent_src = direct_dev_pnpm[name].split(":")[0] if ":" in direct_dev_pnpm[name] else "-"
+                        dep_metadata[(eco, name, ver)] = {
+                            "dep_type": "Direct (Dev)",
+                            "introduced_by": parent_src,
+                            "chain": direct_dev_pnpm[name],
+                            "in_bundle": False,
+                            "is_dev": True,
+                            "type": "direct",
+                            "parent": None,
+                        }
+                    else:
+                        chain = find_chain_bfs(name, dep_graph_pnpm, direct_prod_pnpm, direct_dev_pnpm)
+                        dep_metadata[(eco, name, ver)] = {
+                            "dep_type": "Transitive",
+                            "introduced_by": chain,
+                            "chain": chain,
+                            "in_bundle": False,
+                            "is_dev": False,
+                            "type": "transitive",
+                            "parent": None,
+                        }
+            else:
+                for m in re.finditer(r"^\s*['\"]?/?(@?[a-zA-Z0-9._\-/]+)@(\d+\.\d+\.\d+[^\s(:'\"]*)", content, re.MULTILINE):
+                    name = m.group(1)
+                    ver = m.group(2)
+                    deps[("npm", name, ver)] = True
+                    if name in bundled_map:
+                        b_info = bundled_map[name]
+                        dep_metadata[("npm", name, ver)] = {
+                            "dep_type": "Bundled (inBundle)",
+                            "introduced_by": b_info['parent'],
+                            "chain": f"Bundled in {b_info['parent']} (inBundle: true)",
+                            "in_bundle": True,
+                            "is_dev": True,
+                            "type": "bundled",
+                            "parent": b_info["parent"],
+                        }
+                    else:
+                        dep_metadata.setdefault(("npm", name, ver), {
+                            "dep_type": "Transitive",
+                            "introduced_by": "-",
+                            "chain": "Transitive",
+                            "in_bundle": False,
+                            "is_dev": False,
+                            "type": "transitive",
+                            "parent": None,
+                        })
         except Exception:
             pass
 
@@ -323,6 +581,15 @@ def extract_locked_dependencies(root: Path) -> List[Tuple[str, str, str]]:
                         v = v_match.group(1)
                         for p in curr_pkgs:
                             deps[("npm", p, v)] = True
+                            dep_metadata.setdefault(("npm", p, v), {
+                                "dep_type": "Transitive",
+                                "introduced_by": "-",
+                                "chain": "Transitive",
+                                "in_bundle": False,
+                                "is_dev": False,
+                                "type": "transitive",
+                                "parent": None,
+                            })
                     curr_pkgs = []
         except Exception:
             pass
@@ -333,11 +600,22 @@ def extract_locked_dependencies(root: Path) -> List[Tuple[str, str, str]]:
         if pf.exists():
             try:
                 pj_data = json.loads(pf.read_text(encoding="utf-8", errors="ignore"))
+                rel_prefix = f"{pf.parent.relative_to(root)}: " if pf.parent != root else ""
                 for sec in ("dependencies", "devDependencies"):
+                    is_d = (sec == "devDependencies")
                     for name, spec in pj_data.get(sec, {}).items():
                         clean_v = re.sub(r"^[~^>=< ]+", "", spec).split(" ")[0]
                         if re.match(r"^\d+\.\d+\.\d+", clean_v):
                             deps.setdefault(("npm", name, clean_v), True)
+                            dep_metadata[("npm", name, clean_v)] = {
+                                "dep_type": "Direct (Dev)" if is_d else "Direct (Prod)",
+                                "introduced_by": rel_prefix.rstrip(": ") if rel_prefix else "-",
+                                "chain": f"{rel_prefix}Direct ({sec})",
+                                "in_bundle": False,
+                                "is_dev": is_d,
+                                "type": "direct",
+                                "parent": None,
+                            }
             except Exception:
                 pass
 
@@ -351,38 +629,87 @@ def extract_locked_dependencies(root: Path) -> List[Tuple[str, str, str]]:
                     continue
                 m = re.match(r"^([a-zA-Z0-9_.\-]+)\s*==\s*([0-9a-zA-Z_.\-]+)", line)
                 if m:
-                    deps[("PyPI", m.group(1).lower(), m.group(2))] = True
+                    p_name = m.group(1).lower()
+                    p_ver = m.group(2)
+                    deps[("PyPI", p_name, p_ver)] = True
+                    dep_metadata[("PyPI", p_name, p_ver)] = {
+                        "dep_type": "Direct (Prod)",
+                        "introduced_by": "requirements.txt",
+                        "chain": "Direct (requirements.txt)",
+                        "in_bundle": False,
+                        "is_dev": False,
+                        "type": "direct",
+                        "parent": None,
+                    }
         except Exception:
             pass
 
-    # 4. Go: go.mod
+    # 6. Go: go.mod
     go_mod = root / "go.mod"
     if go_mod.exists():
         try:
             for line in go_mod.read_text(encoding="utf-8", errors="ignore").splitlines():
                 m = re.match(r"^\s*([a-zA-Z0-9_.\-/]+)\s+(v\d+\.\d+\.\d+[^\s/]*)", line)
                 if m:
-                    deps[("Go", m.group(1), m.group(2).lstrip("v"))] = True
+                    g_name = m.group(1)
+                    g_ver = m.group(2).lstrip("v")
+                    is_ind = "// indirect" in line
+                    deps[("Go", g_name, g_ver)] = True
+                    dep_metadata[("Go", g_name, g_ver)] = {
+                        "dep_type": "Transitive" if is_ind else "Direct (Prod)",
+                        "introduced_by": "go.mod (indirect)" if is_ind else "go.mod",
+                        "chain": "Transitive (go.mod indirect)" if is_ind else "Direct (go.mod)",
+                        "in_bundle": False,
+                        "is_dev": False,
+                        "type": "transitive" if is_ind else "direct",
+                        "parent": None,
+                    }
         except Exception:
             pass
 
-    # 5. PHP: composer.lock
+    # 7. PHP: composer.lock
     comp_lock = root / "composer.lock"
     if comp_lock.exists():
         try:
             data = json.loads(comp_lock.read_text(encoding="utf-8", errors="ignore"))
-            for pkg in data.get("packages", []) + data.get("packages-dev", []):
+            for pkg in data.get("packages", []):
                 name = pkg.get("name", "")
                 ver = pkg.get("version", "").lstrip("v")
                 if name and ver:
                     deps[("Packagist", name, ver)] = True
+                    dep_metadata[("Packagist", name, ver)] = {
+                        "dep_type": "Direct (Prod)",
+                        "introduced_by": "composer.lock",
+                        "chain": "Direct (composer.lock)",
+                        "in_bundle": False,
+                        "is_dev": False,
+                        "type": "direct",
+                        "parent": None,
+                    }
+            for pkg in data.get("packages-dev", []):
+                name = pkg.get("name", "")
+                ver = pkg.get("version", "").lstrip("v")
+                if name and ver:
+                    deps[("Packagist", name, ver)] = True
+                    dep_metadata[("Packagist", name, ver)] = {
+                        "dep_type": "Direct (Dev)",
+                        "introduced_by": "composer.lock (dev)",
+                        "chain": "Direct (composer.lock dev)",
+                        "in_bundle": False,
+                        "is_dev": True,
+                        "type": "direct",
+                        "parent": None,
+                    }
         except Exception:
             pass
 
-    return list(deps.keys())
+    return list(deps.keys()), dep_metadata
 
 
-def query_osv_api(deps: List[Tuple[str, str, str]]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+def query_osv_api(
+    deps: List[Tuple[str, str, str]],
+    dep_metadata: Optional[Dict[Tuple[str, str, str], Dict[str, Any]]] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
     Query https://api.osv.dev/v1/querybatch in batches of 500 packages,
     then hydrate vulnerability details (CVE aliases, severity, summary).
@@ -459,11 +786,25 @@ def query_osv_api(deps: List[Tuple[str, str, str]]) -> Tuple[List[Dict[str, Any]
 
                     vuln_cache[vuln_id] = (cve_id, sev, summary, fixed_ver)
 
+                meta = dep_metadata.get((eco, pkg_name, pkg_ver)) or dep_metadata.get(("npm", pkg_name, pkg_ver)) if dep_metadata else None
+                if not meta and dep_metadata:
+                    for (m_eco, m_name, m_ver), m_info in dep_metadata.items():
+                        if m_name == pkg_name:
+                            meta = m_info
+                            break
+
+                dep_type = meta.get("dep_type", "Transitive") if meta else "Transitive"
+                intro = meta.get("introduced_by", "-") if meta else "-"
+                in_bundle = meta.get("in_bundle", False) if meta else False
+
                 fix_note = f" (Fix: >={fixed_ver})" if fixed_ver else ""
                 vulns_found.append({
                     "package": pkg_name,
                     "severity": sev if sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "MEDIUM",
                     "range": pkg_ver,
+                    "dep_type": dep_type,
+                    "introduced_by": intro,
+                    "inBundle": in_bundle,
                     "fixAvailable": bool(fixed_ver),
                     "fixedIn": fixed_ver,
                     "via": f"[{cve_id}] {summary}{fix_note}",
@@ -472,11 +813,25 @@ def query_osv_api(deps: List[Tuple[str, str, str]]) -> Tuple[List[Dict[str, Any]
     return vulns_found, None
 
 
-def check_offline_cve_db(deps: List[Tuple[str, str, str]]) -> List[Dict[str, Any]]:
+def check_offline_cve_db(
+    deps: List[Tuple[str, str, str]],
+    dep_metadata: Optional[Dict[Tuple[str, str, str], Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
     """Check locked dependencies against built-in offline CVE rules & pre-release checks."""
     findings: List[Dict[str, Any]] = []
     for eco, name, ver in deps:
         parsed = parse_semver(ver)
+        meta = dep_metadata.get((eco, name, ver)) if dep_metadata else None
+        if not meta and dep_metadata:
+            for (m_eco, m_name, m_ver), m_info in dep_metadata.items():
+                if m_name == name:
+                    meta = m_info
+                    break
+
+        dep_type = meta.get("dep_type", "Transitive") if meta else "Transitive"
+        intro = meta.get("introduced_by", "-") if meta else "-"
+        in_bundle = meta.get("in_bundle", False) if meta else False
+
         if parsed:
             for rule_eco, rule_pkg, max_ver, cve_id, sev, desc in OFFLINE_KNOWN_CVES:
                 if eco == rule_eco and name == rule_pkg:
@@ -487,6 +842,9 @@ def check_offline_cve_db(deps: List[Tuple[str, str, str]]) -> List[Dict[str, Any
                                 "package": name,
                                 "severity": sev,
                                 "range": ver,
+                                "dep_type": dep_type,
+                                "introduced_by": intro,
+                                "inBundle": in_bundle,
                                 "fixAvailable": True,
                                 "via": f"[{cve_id}] {desc}",
                             })
@@ -495,6 +853,9 @@ def check_offline_cve_db(deps: List[Tuple[str, str, str]]) -> List[Dict[str, Any
                             "package": name,
                             "severity": sev,
                             "range": ver,
+                            "dep_type": dep_type,
+                            "introduced_by": intro,
+                            "inBundle": in_bundle,
                             "fixAvailable": True,
                             "via": f"[{cve_id}] {desc}",
                         })
@@ -506,6 +867,9 @@ def check_offline_cve_db(deps: List[Tuple[str, str, str]]) -> List[Dict[str, Any
                 "package": name,
                 "severity": "LOW",
                 "range": ver,
+                "dep_type": dep_type,
+                "introduced_by": intro,
+                "inBundle": in_bundle,
                 "fixAvailable": True,
                 "via": f"Pre-release version ({ver}) used in security-sensitive dependency",
             })
@@ -520,6 +884,11 @@ def run_dependency_audit(root: Path, use_osv: bool = True) -> Dict[str, Any]:
         "notes": [],
     }
     sources_used: List[str] = []
+
+    # 0. Extract locked dependencies and lineage metadata upfront
+    locked_deps, dep_metadata = extract_locked_dependencies(root)
+    if locked_deps:
+        result["total_locked_packages"] = len(locked_deps)
 
     # 1. Try native CLI tools if available (npm / pnpm / pip-audit / govulncheck / composer)
     if (root / "package-lock.json").exists():
@@ -544,10 +913,46 @@ def run_dependency_audit(root: Path, use_osv: bool = True) -> Dict[str, Any]:
                             else str(v)
                             for v in via
                         ]
+                        nodes = info.get("nodes", [])
+                        is_direct = info.get("isDirect", False)
+                        is_dev = bool(info.get("isDev"))
+                        in_b = False
+                        if nodes:
+                            node = nodes[0]
+                            parts = node.split("node_modules/")
+                            if len(parts) > 2:
+                                p_pkg = parts[-2].rstrip("/")
+                                dep_type = "Bundled (inBundle)"
+                                intro = f"{p_pkg} (via {node})"
+                                in_b = True
+                            elif len(parts) == 2 and not is_direct:
+                                dep_type = "Transitive"
+                                intro = node
+                            else:
+                                dep_type = "Direct (Dev)" if is_dev else "Direct (Prod)"
+                                intro = "-"
+                        else:
+                            dep_type = "Direct (Dev)" if is_dev else ("Direct (Prod)" if is_direct else "Transitive")
+                            intro = "-"
+
+                        # Enrich from dep_metadata if available
+                        meta = None
+                        for k, v in dep_metadata.items():
+                            if k[0] == "npm" and k[1] == pkg_name:
+                                meta = v
+                                break
+                        if meta:
+                            dep_type = meta.get("dep_type", dep_type)
+                            intro = meta.get("introduced_by", intro)
+                            in_b = meta.get("in_bundle", in_b)
+
                         result["vulnerabilities"].append({
                             "package": pkg_name,
                             "severity": sev,
                             "range": info.get("range", ""),
+                            "dep_type": dep_type,
+                            "introduced_by": intro,
+                            "inBundle": in_b,
                             "fixAvailable": bool(info.get("fixAvailable")),
                             "via": ", ".join(via_titles[:3]),
                         })
@@ -574,6 +979,9 @@ def run_dependency_audit(root: Path, use_osv: bool = True) -> Dict[str, Any]:
                             "package": dep.get("name", ""),
                             "severity": "HIGH",
                             "range": dep.get("version", ""),
+                            "dep_type": "Direct (Prod)",
+                            "introduced_by": "requirements.txt",
+                            "inBundle": False,
                             "fixAvailable": bool(v.get("fix_versions")),
                             "via": f"[{cve}] {v.get('description', '')[:120]}",
                         })
@@ -614,25 +1022,26 @@ def run_dependency_audit(root: Path, use_osv: bool = True) -> Dict[str, Any]:
                                 "package": pkg_name,
                                 "severity": str(adv.get("severity", "HIGH")).upper(),
                                 "range": adv.get("affectedVersions", ""),
+                                "dep_type": "Direct (Prod)",
+                                "introduced_by": "composer.lock",
+                                "inBundle": False,
                                 "fixAvailable": True,
                                 "via": f"[{adv.get('cve', adv.get('advisoryId', 'CVE'))}] {adv.get('title', '')}",
                             })
         except Exception:
             pass
 
-    # 2. Extract locked dependencies and query OSV.dev API + Offline Known CVE DB
-    locked_deps = extract_locked_dependencies(root)
+    # 2. Query OSV.dev API + Offline Known CVE DB
     if locked_deps:
-        result["total_locked_packages"] = len(locked_deps)
         if use_osv:
-            osv_vulns, osv_err = query_osv_api(locked_deps)
+            osv_vulns, osv_err = query_osv_api(locked_deps, dep_metadata)
             if osv_err:
                 result["notes"].append(f"OSV.dev live API fallback: {osv_err}; using built-in Offline CVE Database.")
             else:
                 sources_used.append("OSV.dev CVE API")
                 result["vulnerabilities"].extend(osv_vulns)
 
-        offline_vulns = check_offline_cve_db(locked_deps)
+        offline_vulns = check_offline_cve_db(locked_deps, dep_metadata)
         sources_used.append("Offline CVE & Lockfile DB")
         # Deduplicate by (package, via)
         existing_keys = {(v["package"], v["via"]) for v in result["vulnerabilities"]}
@@ -888,6 +1297,8 @@ def apply_cve_overrides(root: Path, dep_audit: Dict[str, Any]) -> List[str]:
     overrides = pkg_data.get("overrides", {})
     applied = []
     for v in dep_audit.get("vulnerabilities", []):
+        if v.get("inBundle"):
+            continue  # Bundled dependencies cannot be overridden via package.json overrides; requires parent update
         pkg = v.get("package")
         fixed_in = v.get("fixedIn")
         if pkg and fixed_in and pkg not in pkg_data.get("dependencies", {}) and pkg not in pkg_data.get("devDependencies", {}):
@@ -1098,10 +1509,12 @@ def format_markdown(root: Path, stack: Dict[str, Any], dep_audit: Dict[str, Any]
     if not vulns:
         out.append("- **Findings**: No known dependency advisories flagged.\n")
     else:
-        out.append("\n| Severity | Package | Version / Range | Details |")
-        out.append("| :--- | :--- | :--- | :--- |")
+        out.append("\n| Severity | Package | Version / Range | Dependency Type | Introduced By / Parent | Details |")
+        out.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
         for v in vulns:
-            out.append(f"| **{v['severity']}** | `{v['package']}` | `{v['range']}` | {v['via']} |")
+            dt = v.get("dep_type") or ("Bundled (inBundle)" if v.get("inBundle") else "Transitive")
+            intro = v.get("introduced_by") or "-"
+            out.append(f"| **{v['severity']}** | `{v['package']}` | `{v['range']}` | `{dt}` | {intro} | {v['via']} |")
         out.append("")
 
     out.append("## 3. Static Code & Configuration Findings (SAST & Secrets)")
